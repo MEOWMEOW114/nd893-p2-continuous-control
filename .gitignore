@@ -109,5 +109,7 @@ ENV/
 
 Banana.app
 Banana.*
-
+Reacher.app
+Reacher_Multi.*
+Reacher_Multi.app
 .idea
