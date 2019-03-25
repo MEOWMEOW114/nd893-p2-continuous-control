@@ -30,17 +30,15 @@ except:
 '''
 Begin help functions and variables
 '''
-LR = None
-SGD_EPOCH = None
-DISCOUNT = None
-EPSILON = None
-BETA = None
+LR = 0.0001
+SGD_EPOCH = 4
+DISCOUNT = 0.99
+EPSILON = 0, 1
+BETA = 0.01
 UPDATE_EVERY = 1
-DEVC = None
-PARAMS = None
-TAU = None
-BATCH_SIZE = None
-GRADIENT_CLIP = None
+TAU = 0.95
+BATCH_SIZE = 64
+GRADIENT_CLIP = 5
 
 
 class Batcher:
@@ -112,6 +110,7 @@ def set_global_parms(d_table):
     DEVC = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     PARAMS = table
 
+
 PATH = os.path.dirname(os.path.realpath(__file__))
 PATH = PATH.replace('ppo', 'config.yaml')
 set_global_parms(yaml.load(open(PATH, 'r'))['PPO'])
@@ -137,7 +136,6 @@ class Agent(object):
 
         self.nb_agents = nb_agents
         self.action_size = action_size
-        self.__name__ = 'PPO'
 
         # Policy Network
         actor_net = Actor(state_size, action_size, rand_seed).to(DEVC)
@@ -233,42 +231,42 @@ class Agent(object):
 def clipped_surrogate(policy, old_probs, states, actions, rewards, old_values,
                       advantages, nb_agents, epsilon=0.1, beta=0.01):
         # discount rewards and convert them to future rewards
-        discount = DISCOUNT**np.arange(len(rewards))
-        rewards = np.asarray(rewards)*discount[:, np.newaxis]
-        rewards_future = rewards[::-1].cumsum(axis=0)[::-1]
+    discount = DISCOUNT**np.arange(len(rewards))
+    rewards = np.asarray(rewards)*discount[:, np.newaxis]
+    rewards_future = rewards[::-1].cumsum(axis=0)[::-1]
 
-        mean = np.mean(rewards_future, axis=1)
-        std = np.std(rewards_future, axis=1) + 1.0e-10
-        rwds_normalized = (rewards_future - mean[:, np.newaxis])
-        rwds_normalized /= std[:, np.newaxis]
+    mean = np.mean(rewards_future, axis=1)
+    std = np.std(rewards_future, axis=1) + 1.0e-10
+    rwds_normalized = (rewards_future - mean[:, np.newaxis])
+    rwds_normalized /= std[:, np.newaxis]
 
-        # convert everything into pytorch tensors and move to gpu if available
-        actions = torch.tensor(actions, dtype=torch.float, device=DEVC)
-        old_probs = torch.tensor(old_probs, dtype=torch.float, device=DEVC)
-        old_values = torch.tensor(old_values, dtype=torch.float, device=DEVC)
-        rewards = torch.tensor(rwds_normalized, dtype=torch.float, device=DEVC)
+    # convert everything into pytorch tensors and move to gpu if available
+    actions = torch.tensor(actions, dtype=torch.float, device=DEVC)
+    old_probs = torch.tensor(old_probs, dtype=torch.float, device=DEVC)
+    old_values = torch.tensor(old_values, dtype=torch.float, device=DEVC)
+    rewards = torch.tensor(rwds_normalized, dtype=torch.float, device=DEVC)
 
-        _, new_probs, entropy_loss, values = policy(states, actions)
+    _, new_probs, entropy_loss, values = policy(states, actions)
 
-        # ratio for clipping. All probabilities used are log probabilities
-        # with torch.no_grad():
-        ratio = (new_probs - old_probs).exp()
-        # pdb.set_trace()
+    # ratio for clipping. All probabilities used are log probabilities
+    # with torch.no_grad():
+    ratio = (new_probs - old_probs).exp()
+    # pdb.set_trace()
 
-        # clipped function
-        clip = torch.clamp(ratio, 1-epsilon, 1+epsilon)
-        # clipped_surrog = torch.min(ratio*rewards[:, :, np.newaxis],
-        #                            clip*rewards[:, :, np.newaxis])
-        clipped_surrog = torch.min(ratio*advantages[:, :, np.newaxis],
-                                   clip*advantages[:, :, np.newaxis])
+    # clipped function
+    clip = torch.clamp(ratio, 1-epsilon, 1+epsilon)
+    # clipped_surrog = torch.min(ratio*rewards[:, :, np.newaxis],
+    #                            clip*rewards[:, :, np.newaxis])
+    clipped_surrog = torch.min(ratio*advantages[:, :, np.newaxis],
+                               clip*advantages[:, :, np.newaxis])
 
-        # include a regularization term
-        # this steers new_policy towards 0.5
-        # this returns an average of all the entries of the tensor
-        # effective computing L_sur^clip / T
-        # averaged over time-step and number of trajectories
-        # this is desirable because we have normalized our rewards
-        entropy_loss = entropy_loss[:, :, np.newaxis]
-        policy_loss = torch.mean(clipped_surrog + beta*entropy_loss)
-        # policy_loss = torch.mean(clipped_surrog)
-        return -policy_loss
+    # include a regularization term
+    # this steers new_policy towards 0.5
+    # this returns an average of all the entries of the tensor
+    # effective computing L_sur^clip / T
+    # averaged over time-step and number of trajectories
+    # this is desirable because we have normalized our rewards
+    entropy_loss = entropy_loss[:, :, np.newaxis]
+    policy_loss = torch.mean(clipped_surrog + beta*entropy_loss)
+    # policy_loss = torch.mean(clipped_surrog)
+    return -policy_loss
