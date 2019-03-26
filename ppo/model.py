@@ -26,8 +26,8 @@ class Policy(nn.Module):
     def forward(self, states, actions=None):
         '''
         '''
-        estimated_actions = self.actor_body(states)
         estimated_values = self.critic_body(states)
+        estimated_actions = self.actor_body(states)
         # pdb.set_trace()
         dist = torch.distributions.Normal(estimated_actions, self.std)
         i_dim = 2
@@ -90,7 +90,7 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
         self.seed = torch.manual_seed(seed)
         self.fcs1 = nn.Linear(state_size, fcs1_units)
-        self.fc2 = nn.Linear(fcs1_units+action_size, fc2_units)
+        self.fc2 = nn.Linear(fcs1_units, fc2_units)
         self.fc3 = nn.Linear(fc2_units, 1)
         self.reset_parameters()
 
@@ -99,10 +99,13 @@ class Critic(nn.Module):
         self.fc2.weight.data.uniform_(*hidden_init(self.fc2))
         self.fc3.weight.data.uniform_(-3e-3, 3e-3)
 
-    def forward(self, state, action):
-        """Build a critic (value) network that maps (state, action) pairs -> Q-values."""
+    def forward(self, state):
+        """
+        Build a critic (value) network that maps
+        (state, action) pairs -> Q-values
+        :param state: tuple.
+        :param action: tuple.
+        """
         xs = F.relu(self.fcs1(state))
-        # Expected a Tensor of type torch.FloatTensor but found a type torch.LongTensor
-        # x = torch.cat((xs, action.float()), dim=1)
-        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc2(xs))
         return self.fc3(x)

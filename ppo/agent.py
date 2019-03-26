@@ -20,12 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-import pdb
-
-try:
-    from agent_utils import param_table, Actor, Critic, Policy
-except:
-    from .agent_utils import param_table, Actor, Critic, Policy
+from .model import Actor, Critic, Policy
 
 '''
 Begin help functions and variables
@@ -40,6 +35,7 @@ TAU = 0.95
 BATCH_SIZE = 64
 GRADIENT_CLIP = 5
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class Batcher:
     '''
@@ -86,40 +82,6 @@ class Batcher:
         np.random.shuffle(indices)
         self.data = [d[indices] for d in self.data]
 
-
-def set_global_parms(d_table):
-    '''
-    Convert statsmodel tabel to the agent parameters
-    :param d_table: Dictionary. Parameters of the agent
-    '''
-    global LR, SGD_EPOCH, BETA, EPSILON, DISCOUNT, DEVC, PARAMS, TAU
-    global BATCH_SIZE, GRADIENT_CLIP
-    l_table = [(a, [b]) for a, b in d_table.items()]
-    d_params = dict([[x[0], x[1][0]] for x in l_table])
-    table = param_table.generate_table(l_table[:int(len(l_table)/2)],
-                                       l_table[int(len(l_table)/2):],
-                                       'PPO PARAMETERS')
-    LR = d_params['LR']
-    SGD_EPOCH = d_params['SGD_EPOCH']
-    BETA = d_params['BETA']
-    EPSILON = d_params['EPSILON']
-    DISCOUNT = d_params['DISCOUNT']
-    TAU = d_params['TAU']
-    BATCH_SIZE = d_params['BATCH_SIZE']
-    GRADIENT_CLIP = d_params['GRADIENT_CLIP']
-    DEVC = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    PARAMS = table
-
-
-PATH = os.path.dirname(os.path.realpath(__file__))
-PATH = PATH.replace('ppo', 'config.yaml')
-set_global_parms(yaml.load(open(PATH, 'r'))['PPO'])
-
-'''
-End help functions and variables
-'''
-
-
 class Agent(object):
     '''
     Implementation of a PPO agent that interacts with and learns from the
@@ -138,8 +100,9 @@ class Agent(object):
         self.action_size = action_size
 
         # Policy Network
-        actor_net = Actor(state_size, action_size, rand_seed).to(DEVC)
-        critic_net = Critic(state_size, action_size, rand_seed).to(DEVC)
+        actor_net = Actor(state_size, action_size, rand_seed).to(device)
+        critic_net = Critic(state_size, action_size, rand_seed).to(device)
+        # print(critic_net)
         self.policy = Policy(action_size, actor_net, critic_net)
         self.optimizer = optim.Adam(self.policy.parameters(), lr=LR)
 
@@ -159,7 +122,7 @@ class Agent(object):
         '''Returns actions for given states as per current policy.
         :param states: array_like. current states
         '''
-        states = torch.from_numpy(states).float().to(DEVC)
+        states = torch.from_numpy(states).float().to(device)
         self.policy.eval()
         with torch.no_grad():
             actions, log_probs, entropy_loss, values = self.policy(states)
@@ -241,10 +204,10 @@ def clipped_surrogate(policy, old_probs, states, actions, rewards, old_values,
     rwds_normalized /= std[:, np.newaxis]
 
     # convert everything into pytorch tensors and move to gpu if available
-    actions = torch.tensor(actions, dtype=torch.float, device=DEVC)
-    old_probs = torch.tensor(old_probs, dtype=torch.float, device=DEVC)
-    old_values = torch.tensor(old_values, dtype=torch.float, device=DEVC)
-    rewards = torch.tensor(rwds_normalized, dtype=torch.float, device=DEVC)
+    actions = torch.tensor(actions, dtype=torch.float, device=device)
+    old_probs = torch.tensor(old_probs, dtype=torch.float, device=device)
+    old_values = torch.tensor(old_values, dtype=torch.float, device=device)
+    rewards = torch.tensor(rwds_normalized, dtype=torch.float, device=device)
 
     _, new_probs, entropy_loss, values = policy(states, actions)
 
